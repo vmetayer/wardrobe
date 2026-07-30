@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Plus, Trash, X } from "@phosphor-icons/react";
+import { Check, Plus, ThumbsDown, ThumbsUp, Trash, X } from "@phosphor-icons/react";
 import { WardrobeImportFlow } from "./import-flow.jsx";
 import { OptimizedImage } from "./OptimizedImage.jsx";
 
@@ -17,6 +17,36 @@ const TYPES = [
 
 const TYPE_MAP = Object.fromEntries(TYPES.map((type) => [type.id, type]));
 const TYPE_ORDER = Object.fromEntries(TYPES.slice(1).map((type, index) => [type.id, index]));
+const APP_VIEWS = [
+  { id: "wardrobe", label: "Wardrobe", href: "/" },
+  { id: "outfits", label: "Outfits", href: "/outfits" },
+];
+const OUTFIT_ARCHETYPE_LABELS = {
+  "simple-intentional-base": "Simple intentional",
+  "polished-shorts": "Polished shorts",
+  "controlled-streetwear": "Controlled streetwear",
+  "relaxed-knit-smart-casual": "Relaxed knit",
+  "cropped-layer-clean-base": "Cropped layer",
+  "soft-tailoring": "Soft tailoring",
+};
+
+function ViewNav({ activeView, onNavigate }) {
+  return (
+    <nav className="view-nav" aria-label="Wardrobe sections">
+      {APP_VIEWS.map((view) => (
+        <a
+          href={view.href}
+          key={view.id}
+          className={activeView === view.id ? "active" : ""}
+          aria-current={activeView === view.id ? "page" : undefined}
+          onClick={(event) => onNavigate(event, view.href)}
+        >
+          {view.label}
+        </a>
+      ))}
+    </nav>
+  );
+}
 
 
 function readEdits() {
@@ -532,7 +562,220 @@ function ItemViewer({ item, onClose, onSave, onDelete }) {
   );
 }
 
-export function App() {
+function outfitArchetypeLabel(value) {
+  return OUTFIT_ARCHETYPE_LABELS[value] || value?.replaceAll("-", " ") || "Outfit";
+}
+
+function OutfitRatingControls({ outfit, onRate, compact = false }) {
+  return (
+    <div className={`outfit-rating-controls${compact ? " compact" : ""}`} aria-label={`Rate ${outfit.name}`}>
+      <button
+        type="button"
+        className={outfit.rating === "up" ? "active" : ""}
+        onClick={() => onRate(outfit.id, "up")}
+        aria-label={`Like ${outfit.name}`}
+        aria-pressed={outfit.rating === "up"}
+        title="I like this outfit"
+      >
+        <ThumbsUp size={compact ? 16 : 18} weight={outfit.rating === "up" ? "fill" : "regular"} aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        className={outfit.rating === "down" ? "active negative" : ""}
+        onClick={() => onRate(outfit.id, "down")}
+        aria-label={`Dislike ${outfit.name}`}
+        aria-pressed={outfit.rating === "down"}
+        title="This outfit is not for me"
+      >
+        <ThumbsDown size={compact ? 16 : 18} weight={outfit.rating === "down" ? "fill" : "regular"} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+function OutfitCard({ outfit, selected, onOpen, onRate }) {
+  const occasion = outfit.occasion?.[0]?.replaceAll("-", " ") || "Everyday";
+
+  return (
+    <article className={`outfit-card${selected ? " selected" : ""}`}>
+      <button className="outfit-card-open" type="button" onClick={() => onOpen(outfit.id)} aria-label={`View ${outfit.name}`} aria-pressed={selected}>
+        <span className="outfit-card-image">
+          <OptimizedImage
+            src={outfit.image}
+            alt=""
+            sizes="(max-width: 640px) calc(100vw - 32px), (max-width: 1100px) 45vw, 31vw"
+            breakpoints={[320, 480, 640, 800, 1040]}
+          />
+        </span>
+        <span className="outfit-card-copy">
+          <strong>{outfit.name}</strong>
+          <small>{occasion}</small>
+        </span>
+      </button>
+      <OutfitRatingControls outfit={outfit} onRate={onRate} compact />
+    </article>
+  );
+}
+
+function OutfitViewer({ outfit, onClose, onRate }) {
+  const closeButtonRef = useRef(null);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.body.classList.add("viewer-open");
+    closeButtonRef.current?.focus({ preventScroll: true });
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.classList.remove("viewer-open");
+    };
+  }, [onClose]);
+
+  return (
+    <div className="viewer-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div className="viewer-entry outfit-viewer-entry">
+        <aside className="outfit-viewer" role="dialog" aria-modal="true" aria-labelledby="outfit-viewer-title">
+          <button className="viewer-icon-close outfit-viewer-close" type="button" onClick={onClose} aria-label="Close outfit viewer" ref={closeButtonRef}>
+            <X size={24} weight="light" aria-hidden="true" />
+          </button>
+          <OptimizedImage
+            className="outfit-viewer-image"
+            src={outfit.image}
+            alt={`${outfit.name} modeled outfit`}
+            sizes="(max-width: 860px) 100vw, 520px"
+            breakpoints={[480, 640, 800, 1040]}
+            priority
+          />
+          <div className="outfit-viewer-copy">
+            <p className="outfit-viewer-kicker">{outfitArchetypeLabel(outfit.styleArchetype)}</p>
+            <h2 id="outfit-viewer-title">{outfit.name}</h2>
+            <div className="outfit-chips" aria-label="Occasions">
+              {(outfit.occasion || []).map((occasion) => <span key={occasion}>{occasion.replaceAll("-", " ")}</span>)}
+            </div>
+            <div className="outfit-viewer-rating-row">
+              <span>Teach future recommendations</span>
+              <OutfitRatingControls outfit={outfit} onRate={onRate} />
+            </div>
+            {outfit.reason && <p className="outfit-reason">{outfit.reason}</p>}
+            {!!outfit.garments?.length && (
+              <div className="outfit-piece-list">
+                <p>Wardrobe pieces</p>
+                <ul>
+                  {outfit.garments.map((garment) => <li key={garment.id}>{garment.name}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function OutfitsView({ onNavigate }) {
+  const [outfits, setOutfits] = useState([]);
+  const [activeArchetype, setActiveArchetype] = useState("all");
+  const [selectedId, setSelectedId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/outfits", { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error("Could not load generated outfits.");
+        return response.json();
+      })
+      .then((manifest) => setOutfits(Array.isArray(manifest.outfits) ? manifest.outfits : []))
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const archetypes = useMemo(() => [...new Set(outfits.map((outfit) => outfit.styleArchetype).filter(Boolean))], [outfits]);
+  const visibleOutfits = useMemo(
+    () => activeArchetype === "all" ? outfits : outfits.filter((outfit) => outfit.styleArchetype === activeArchetype),
+    [activeArchetype, outfits],
+  );
+  const selectedOutfit = outfits.find((outfit) => outfit.id === selectedId) || null;
+  const likedCount = outfits.filter((outfit) => outfit.rating === "up").length;
+  const dislikedCount = outfits.filter((outfit) => outfit.rating === "down").length;
+
+  const rateOutfit = useCallback(async (id, requestedRating) => {
+    const previousRating = outfits.find((outfit) => outfit.id === id)?.rating || null;
+    const rating = previousRating === requestedRating ? null : requestedRating;
+    setOutfits((current) => current.map((outfit) => outfit.id === id ? { ...outfit, rating } : outfit));
+    try {
+      const response = await fetch(`/api/outfit-feedback/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating }),
+      });
+      if (!response.ok) throw new Error("Could not save outfit feedback.");
+      setError("");
+    } catch (requestError) {
+      setOutfits((current) => current.map((outfit) => outfit.id === id ? { ...outfit, rating: previousRating } : outfit));
+      setError(requestError.message);
+    }
+  }, [outfits]);
+
+  return (
+    <div className={`app-shell outfits-shell${selectedOutfit ? " has-selection" : ""}`}>
+      <main className="gallery-pane">
+        <header className="gallery-header outfit-gallery-header">
+          <div className="gallery-meta-row">
+            <p className="piece-count">{outfits.length} {outfits.length === 1 ? "look" : "looks"}</p>
+            <ViewNav activeView="outfits" onNavigate={onNavigate} />
+          </div>
+          <div className="outfit-heading-row">
+            <div>
+              <p className="outfit-eyebrow">Generated from your wardrobe</p>
+              <h1>Outfits</h1>
+            </div>
+            <p>Two distinct combinations for every top, shaped by your saved style profile.</p>
+          </div>
+          <p className="outfit-feedback-summary" aria-live="polite">
+            {likedCount || dislikedCount
+              ? `${likedCount} liked · ${dislikedCount} not for me`
+              : "Use the thumbs to teach future outfit recommendations."}
+          </p>
+          {!!outfits.length && (
+            <nav className="category-nav outfit-filter-nav" aria-label="Filter outfits by style">
+              <button type="button" className={activeArchetype === "all" ? "active" : ""} onClick={() => setActiveArchetype("all")} aria-pressed={activeArchetype === "all"}>All</button>
+              {archetypes.map((archetype) => (
+                <button
+                  type="button"
+                  key={archetype}
+                  className={activeArchetype === archetype ? "active" : ""}
+                  onClick={() => setActiveArchetype(archetype)}
+                  aria-pressed={activeArchetype === archetype}
+                >
+                  {outfitArchetypeLabel(archetype)}
+                </button>
+              ))}
+            </nav>
+          )}
+        </header>
+
+        {error && <p className="status error">{error}</p>}
+        {!error && loading && <p className="status">Loading outfits</p>}
+        {!error && !loading && !outfits.length && <p className="status empty">No generated outfits yet.</p>}
+
+        {!!outfits.length && (
+          <section className="outfit-grid" aria-label="Generated outfits">
+            {visibleOutfits.map((outfit) => (
+              <OutfitCard key={outfit.id} outfit={outfit} selected={selectedId === outfit.id} onOpen={setSelectedId} onRate={rateOutfit} />
+            ))}
+          </section>
+        )}
+      </main>
+
+      {selectedOutfit && <OutfitViewer outfit={selectedOutfit} onClose={() => setSelectedId(null)} onRate={rateOutfit} />}
+    </div>
+  );
+}
+
+function WardrobeView({ onNavigate }) {
   const [items, setItems] = useState([]);
   const [activeType, setActiveType] = useState("all");
   const [selectedId, setSelectedId] = useState(null);
@@ -609,6 +852,7 @@ export function App() {
         <header className="gallery-header">
           <div className="gallery-meta-row">
             <p className="piece-count">{items.length} {items.length === 1 ? "piece" : "pieces"}</p>
+            <ViewNav activeView="wardrobe" onNavigate={onNavigate} />
           </div>
           <nav className="category-nav" aria-label="Filter wardrobe by item type">
             {TYPES.map((type) => (
@@ -647,4 +891,34 @@ export function App() {
       <WardrobeImportFlow onGarmentApproved={addImportedItem} onModeledApproved={attachImportedModeledImage} />
     </div>
   );
+}
+
+export function App() {
+  const [pathname, setPathname] = useState(() => window.location.pathname);
+
+  useEffect(() => {
+    const syncPathname = () => setPathname(window.location.pathname);
+    window.addEventListener("popstate", syncPathname);
+    return () => window.removeEventListener("popstate", syncPathname);
+  }, []);
+
+  const navigate = useCallback((event, href) => {
+    if (
+      event.defaultPrevented
+      || event.button !== 0
+      || event.metaKey
+      || event.ctrlKey
+      || event.shiftKey
+      || event.altKey
+    ) return;
+    event.preventDefault();
+    if (window.location.pathname !== href) window.history.pushState({}, "", href);
+    setPathname(href);
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, []);
+
+  const activeView = pathname === "/outfits" || pathname.startsWith("/outfits/") ? "outfits" : "wardrobe";
+  return activeView === "outfits"
+    ? <OutfitsView onNavigate={navigate} />
+    : <WardrobeView onNavigate={navigate} />;
 }
