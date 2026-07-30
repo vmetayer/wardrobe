@@ -1,6 +1,6 @@
 ---
 name: generate-outfits
-description: Curate complete outfits from the local Wardrobe database and generate identity-preserving square modeled photos for every selected look end to end. Use when a user asks Codex for outfit ideas, combinations, looks, styling suggestions, a lookbook, or modeled outfit images based on clothes already imported into this Wardrobe.
+description: Curate complete outfits from the local Wardrobe database using the user's saved relaxed-refinement style profile and persistent thumbs feedback, then generate identity-preserving square modeled photos for every selected look end to end. Use when a user asks Codex for outfit ideas, combinations, looks, styling suggestions, a lookbook, or modeled outfit images based on clothes already imported into this Wardrobe.
 ---
 
 # Generate Outfits
@@ -18,11 +18,15 @@ Do the workflow end to end after receiving the count. Do not stop after returnin
 ## Requirements
 
 - Read and follow the built-in `imagegen` skill before generating images.
+- Read [references/saved-style-profile.md](references/saved-style-profile.md) before curating. Treat it as the user's default taste layer, not as a substitute for an explicit season, occasion, dress code, or styling request.
+- When `data/outfit-feedback.json` exists, read [references/outfit-feedback.md](references/outfit-feedback.md) and apply the user's durable thumbs feedback before scoring combinations.
 - Require `data/library.json`, enough tops and bottoms for the requested count, and a local identity reference at `data/model-reference.png` or `WARDROBE_MODEL_REFERENCE`.
 - Keep every source garment and identity image local and unchanged.
 - Never add `data/`, the identity reference, garment images, or generated photos to Git.
 - Use only wardrobe items that exist in the current database and whose local assets resolve successfully.
 - Generate exactly the requested number of unique outfits and exactly one accepted modeled photo for each.
+- Do not browse social media, request an Instagram login, or perform new creator research during this workflow. The saved style profile is the completed one-time research artifact.
+- Never use creator posts, saved-post screenshots, or other social-media images as Imagegen references. Use only the local identity reference and exact wardrobe garment assets.
 
 ## Parallel work
 
@@ -56,7 +60,19 @@ Each outfit must contain exactly one top and one bottom, with an optional jacket
 - Keep layered looks physically plausible and make every selected garment visibly identifiable.
 - Diversify garment usage instead of repeatedly leaning on the easiest neutral pieces.
 
-Cover a useful mix of the user’s requested contexts. Without specific direction, balance casual, smart-casual, warm-weather, layered, dark-tonal, and statement looks as the wardrobe permits.
+Apply the saved style profile after satisfying the user's explicit direction:
+
+- Choose one named archetype from the profile for each outfit.
+- Build around a two- or three-color system; favor the profile's navy, cream, brown, forest, charcoal, black, olive, denim, and soft-yellow combinations.
+- Prefer deliberate proportion formulas: a compact or fitted top with fuller trousers, a cropped or boxy layer over a clean base, or an easy knit with straight or relaxed bottoms.
+- Let loafers, derbies, minimal sneakers, or a deliberately chosen retro runner ground the look. Use technical sneakers only in the streetwear lane.
+- Use texture before loud color: knit, rib, linen, brushed wool, leather, suede, and faded denim.
+- Keep accessories edited. One hat, bandana, watch, chain, or ring story is usually enough; never stack unrelated focal accessories.
+- Reject skinny or restrictive bottoms, uncontrolled head-to-toe oversizing, multiple competing graphics, and outfits whose only merit is matching color.
+
+Apply feedback as a personalized overlay, not a rigid recommendation loop. Prefer style signals supported by multiple likes, down-rank repeated negative signals, and reject an exact disliked garment combination unless the user explicitly asks for it. Do not conclude that a single garment is disliked from one whole-outfit downvote, and preserve some variety rather than generating only near-duplicates of liked looks.
+
+Without specific styling direction, target a collection mix of roughly 55% relaxed refinement, 25% intentional warm-weather or polished casual, and 20% controlled streetwear as the wardrobe permits. For small counts, prioritize variety over exact percentages.
 
 Build `$WORK/outfits.json` with the final target count:
 
@@ -68,6 +84,8 @@ Build `$WORK/outfits.json` with the final target count:
       "id": "navy-camel-classic",
       "name": "Navy & Camel Classic",
       "occasion": ["smart-casual", "office"],
+      "styleArchetype": "relaxed-knit-smart-casual",
+      "styleSignals": ["compact-knit-fuller-trouser", "restrained-three-color-system", "loafer-grounded"],
       "garmentIds": ["import-...", "import-..."],
       "reason": "Deep navy and camel create controlled warm-cool contrast.",
       "setting": "a quiet warm-stone courtyard with restrained greenery",
@@ -79,6 +97,8 @@ Build `$WORK/outfits.json` with the final target count:
 ```
 
 Use stable lowercase hyphenated IDs. Reject duplicate garment combinations even when names or settings differ.
+
+Before accepting a combination, score it from 0–2 on occasion fit, palette, proportion, texture or focal interest, footwear coherence, and distinctness from the rest of the collection. Then apply the feedback adjustment from `references/outfit-feedback.md`. Reject combinations that score below 8/12 after adjustment or fail a hard wardrobe-asset requirement.
 
 ## 3. Prepare references and prompts
 
@@ -130,4 +150,4 @@ Do not claim the current gallery displays outfits unless the app has an outfit r
 
 ## Finish
 
-Report the requested and completed count, output paths, any regenerated failures, and the styling mix. Display up to 12 modeled outfits in chat and point the user to the local folder for the rest.
+Report the requested and completed count, output paths, any regenerated failures, the archetypes and style signals used, and the styling mix. Display up to 12 modeled outfits in chat and point the user to the local folder for the rest.
